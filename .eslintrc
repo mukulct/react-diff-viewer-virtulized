@@ -1,7 +1,6 @@
 {
-  "extends": ["airbnb-base", "plugin:@typescript-eslint/recommended"],
+  "extends": ["plugin:@typescript-eslint/recommended"],
   "rules": {
-    "@typescript-eslint/indent": ["error", 2],
     "arrow-body-style": "off",
     "import/extensions": "off"
   },

@@ -1,25 +1,18 @@
 const path = require('path');
-const HtmlWebpackPlugin = require('html-webpack-plugin');
 const Css = require('mini-css-extract-plugin');
+const ThreadsPlugin = require('threads-plugin');
 
 module.exports = {
   entry: {
-    main: './examples/src/index.tsx',
+    main: './workers/diffWorker.ts',
   },
-  mode: process.env.NODE_ENV === 'production' ? 'production' : 'development',
+  mode: 'production',
   resolve: {
     extensions: ['.jsx', '.tsx', '.ts', '.scss', '.css', '.js'],
   },
   output: {
-    path: path.resolve(__dirname, 'examples/dist'),
+    path: path.resolve(__dirname, 'build/dist'),
     filename: '[name].js',
-  },
-  devServer: {
-    static: {
-      directory: path.resolve(__dirname, 'examples/dist'),
-    },
-    port: 8000,
-    hot: true,
   },
   module: {
     rules: [
@@ -43,18 +36,12 @@ module.exports = {
         test: /\.xml|.rjs|.java/,
         use: 'raw-loader',
       },
-      {
-        test: /\.svg|.png/,
-        use: 'file-loader',
-      },
     ],
   },
   plugins: [
-    new HtmlWebpackPlugin({
-      template: './examples/src/index.ejs',
-    }),
     new Css({
       filename: 'main.css',
     }),
+    new ThreadsPlugin(),
   ],
 };

@@ -1,11 +1,21 @@
-import * as React from 'react';
-import * as PropTypes from 'prop-types';
 import cn from 'classnames';
+import * as React from 'react';
 
-import {computeLineInformation, DiffInformation, DiffMethod, DiffType, LineInformation,} from './compute-lines';
-import computeStyles, {ReactDiffViewerStyles, ReactDiffViewerStylesOverride,} from './styles';
-import {ReactElement} from "react";
-import {computeHiddenBlocks} from "./compute-hidden-blocks";
+import { ReactElement } from 'react';
+import { BlobWorker, Thread, spawn } from 'threads';
+import { Block } from './compute-hidden-blocks';
+import {
+  DiffInformation,
+  DiffMethod,
+  DiffType,
+  LineInformation,
+} from './compute-lines';
+import computeStyles, {
+  ReactDiffViewerStyles,
+  ReactDiffViewerStylesOverride,
+} from './styles';
+
+import { worker } from './worker-output';
 
 const m = require('memoize-one');
 
@@ -18,9 +28,9 @@ export enum LineNumberPrefix {
 
 export interface ReactDiffViewerProps {
   // Old value to compare.
-  oldValue: string | Object;
+  oldValue: string | JSON;
   // New value to compare.
-  newValue: string | Object;
+  newValue: string | JSON;
   // Enable/Disable split view.
   splitView?: boolean;
   // Set line Offset
@@ -36,7 +46,7 @@ export interface ReactDiffViewerProps {
   /**
    * Show the lines indicated here. Specified as L20 or R18 for respectively line 20 on the left or line 18 on the right.
    */
-  alwaysShowLines?: string[]
+  alwaysShowLines?: string[];
   // Show only diff between the two values.
   showDiffOnly?: boolean;
   // Render prop to format final string before displaying them in the UI.
@@ -72,13 +82,19 @@ export interface ReactDiffViewerProps {
   leftTitle?: string | ReactElement;
   // Title for left column
   rightTitle?: string | ReactElement;
-  	// Nonce
-	nonce?: string;
+  // Nonce
+  nonce?: string;
+  onComputing?: (loading: boolean) => void;
 }
 
 export interface ReactDiffViewerState {
   // Array holding the expanded code folding.
+  lineInformation?: LineInformation[];
   expandedBlocks?: number[];
+  diffLines?: number[];
+  lineBlocks: Record<number, number>;
+  blocks: Block[];
+  ready: boolean;
 }
 
 class DiffViewer extends React.Component<
@@ -86,6 +102,7 @@ class DiffViewer extends React.Component<
   ReactDiffViewerState
 > {
   private styles: ReactDiffViewerStyles;
+  private worker: any;
 
   public static defaultProps: ReactDiffViewerProps = {
     oldValue: '',
@@ -108,7 +125,38 @@ class DiffViewer extends React.Component<
 
     this.state = {
       expandedBlocks: [],
+      lineInformation: [],
+      diffLines: [],
+      blocks: [],
+      lineBlocks: [],
+      ready: false,
     };
+  }
+
+  async componentDidMount(): Promise<void> {
+    this.props.onComputing?.(true);
+    try {
+      const workerCode = window.atob(worker);
+
+      this.worker = await spawn(BlobWorker.fromText(workerCode));
+      this.setState({
+        ...this.state,
+        ready: true,
+      });
+      this._componentDidUpdate(this.props, true);
+    } catch (e) {
+      console.error('Error setting up diff worker', e);
+    }
+  }
+
+  async componentWillUnmount(): Promise<void> {
+    if (this.worker) {
+      try {
+        await Thread.terminate(this.worker);
+      } catch (e) {
+        console.error('error terminating diff worker', e);
+      }
+    }
   }
 
   /**
@@ -117,9 +165,10 @@ class DiffViewer extends React.Component<
    */
   public resetCodeBlocks = (): boolean => {
     if (this.state.expandedBlocks.length > 0) {
-      this.setState({
+      this.setState((prev) => ({
+        ...prev,
         expandedBlocks: [],
-      });
+      }));
       return true;
     }
     return false;
@@ -133,9 +182,10 @@ class DiffViewer extends React.Component<
     const prevState = this.state.expandedBlocks.slice();
     prevState.push(id);
 
-    this.setState({
+    this.setState((prev) => ({
+      ...prev,
       expandedBlocks: prevState,
-    });
+    }));
   };
 
   /**
@@ -160,7 +210,9 @@ class DiffViewer extends React.Component<
     if (this.props.onLineNumberClick) {
       return (e: any): void => this.props.onLineNumberClick(id, e);
     }
-    return (): void => {};
+    return (): void => {
+      // nothing
+    };
   };
 
   /**
@@ -482,69 +534,153 @@ class DiffViewer extends React.Component<
     );
   };
 
+  componentDidUpdate(prevProps: Readonly<ReactDiffViewerProps>): Promise<void> {
+    if (!this.state.ready) {
+      this.props.onComputing?.(true);
+      return;
+    }
+    this._componentDidUpdate(prevProps);
+  }
 
+  async _componentDidUpdate(
+    prevProps: Readonly<ReactDiffViewerProps>,
+    computeNow?: boolean,
+  ) {
+    const { oldValue, newValue, disableWordDiff, compareMethod, linesOffset } =
+      this.props;
+    if (
+      oldValue !== prevProps.oldValue ||
+      newValue !== prevProps.newValue ||
+      computeNow
+    ) {
+      this.props.onComputing?.(true);
+      console.log(
+        'Computing diff',
+        oldValue.toString().length,
+        newValue.toString().length,
+      );
+      console.time('diff');
+      const { lineInformation, diffLines } =
+        await this.worker.computeLineInformation(
+          oldValue,
+          newValue,
+          disableWordDiff,
+          compareMethod,
+          linesOffset,
+          this.props.alwaysShowLines,
+        );
+
+      const extraLines =
+        this.props.extraLinesSurroundingDiff < 0
+          ? 0
+          : Math.round(this.props.extraLinesSurroundingDiff);
+
+      const { lineBlocks, blocks } = await this.worker.computeHiddenBlocks(
+        this.state.lineInformation,
+        this.state.diffLines,
+        extraLines,
+      );
+
+      this.setState((prev) => ({
+        ...prev,
+        lineInformation,
+        diffLines,
+        lineBlocks,
+        blocks,
+      }));
+      console.log('Diff computed');
+      console.timeEnd('diff');
+    }
+
+    const hasComputed = this.state.lineInformation?.length > 0;
+    debugger;
+    this.props.onComputing?.(!hasComputed);
+  }
 
   /**
    * Generates the entire diff view.
    */
-  private renderDiff = (): ReactElement[] => {
-    const {
-      oldValue,
-      newValue,
-      splitView,
-      disableWordDiff,
-      compareMethod,
-      linesOffset,
-    } = this.props;
-    const { lineInformation, diffLines } = computeLineInformation(
-      oldValue,
-      newValue,
-      disableWordDiff,
-      compareMethod,
-      linesOffset,
-      this.props.alwaysShowLines
-    );
+  private renderDiff = (): ReactElement | ReactElement[] => {
+    const { splitView } = this.props;
 
-    const extraLines =
-      this.props.extraLinesSurroundingDiff < 0
-        ? 0
-        : Math.round(this.props.extraLinesSurroundingDiff);
+    const rowRenderer = (index: number, styles: any) => {
+      const line = this.state.lineInformation[index];
+      const lineIndex = index;
 
-    const { lineBlocks, blocks } = computeHiddenBlocks(lineInformation, diffLines, extraLines)
-
-    return lineInformation.map(
-      (line: LineInformation, lineIndex: number): ReactElement => {
-
-        if (this.props.showDiffOnly) {
-          const blockIndex = lineBlocks[lineIndex]
-
-          if (blockIndex !== undefined) {
-            const lastLineOfBlock = blocks[blockIndex].endLine === lineIndex;
-            if (!this.state.expandedBlocks.includes(blockIndex) && lastLineOfBlock) {
-              return (
-                <React.Fragment key={lineIndex}>
-                  {this.renderSkippedLineIndicator(
-                    blocks[blockIndex].lines,
-                    blockIndex,
-                    line.left.lineNumber,
-                    line.right.lineNumber,
-                  )}
-                </React.Fragment>
-              );
-            } else if (!this.state.expandedBlocks.includes(blockIndex)) {
-              return null
-            }
+      if (this.props.showDiffOnly) {
+        const blockIndex = this.state.lineBlocks[lineIndex];
+        if (blockIndex !== undefined) {
+          const lastLineOfBlock =
+            this.state.blocks[blockIndex].endLine === lineIndex;
+          if (
+            !this.state.expandedBlocks.includes(blockIndex) &&
+            lastLineOfBlock
+          ) {
+            return (
+              <React.Fragment key={index}>
+                {this.renderSkippedLineIndicator(
+                  this.state.blocks[blockIndex].lines,
+                  blockIndex,
+                  line.left.lineNumber,
+                  line.right.lineNumber,
+                )}
+              </React.Fragment>
+            );
+          } else if (!this.state.expandedBlocks.includes(blockIndex)) {
+            return null;
           }
         }
+      }
 
-        const diffNodes = splitView
-          ? this.renderSplitView(line, lineIndex)
-          : this.renderInlineView(line, lineIndex);
+      const diffNodes = splitView
+        ? this.renderSplitView(line, lineIndex)
+        : this.renderInlineView(line, lineIndex);
+      return diffNodes;
+    };
 
+    return this.state.lineInformation.map((line, index) => {
+      return rowRenderer(index, {});
+    });
 
-        return diffNodes;
-      },
-    );
+    // return (
+    //   <List
+    //     width={1200}
+    //     rowHeight={20}
+    //     height={500}
+    //     rowCount={this.state.lineInformation.length}
+    //     rowRenderer={({ index, style }) => rowRenderer(index, style)}
+    //   />
+    // );
+
+    //     if (this.props.showDiffOnly) {
+    //       const blockIndex = lineBlocks[lineIndex]
+
+    //       if (blockIndex !== undefined) {
+    //         const lastLineOfBlock = blocks[blockIndex].endLine === lineIndex;
+    //         if (!this.state.expandedBlocks.includes(blockIndex) && lastLineOfBlock) {
+    //           return (
+    //             <React.Fragment key={lineIndex}>
+    //               {this.renderSkippedLineIndicator(
+    //                 blocks[blockIndex].lines,
+    //                 blockIndex,
+    //                 line.left.lineNumber,
+    //                 line.right.lineNumber,
+    //               )}
+    //             </React.Fragment>
+    //           );
+    //         } else if (!this.state.expandedBlocks.includes(blockIndex)) {
+    //           return null
+    //         }
+    //       }
+    //     }
+
+    //     const diffNodes = splitView
+    //       ? this.renderSplitView(line, lineIndex)
+    //       : this.renderInlineView(line, lineIndex);
+
+    //     return diffNodes;
+    //   },
+    // );
   };
 
   public render = (): ReactElement => {
@@ -569,7 +705,7 @@ class DiffViewer extends React.Component<
     const nodes = this.renderDiff();
     const colSpanOnSplitView = hideLineNumbers ? 2 : 3;
     const colSpanOnInlineView = hideLineNumbers ? 2 : 4;
-    let columnExtension = this.props.renderGutter ? 1 : 0;
+    const columnExtension = this.props.renderGutter ? 1 : 0;
 
     const title = (leftTitle || rightTitle) && (
       <tr>
@@ -600,7 +736,7 @@ class DiffViewer extends React.Component<
         })}
       >
         <tbody>
-          {title}
+          {Boolean(this.state.lineInformation?.length) && title}
           {nodes}
         </tbody>
       </table>
@@ -609,4 +745,4 @@ class DiffViewer extends React.Component<
 }
 
 export default DiffViewer;
-export { ReactDiffViewerStylesOverride, DiffMethod };
+export { DiffMethod, ReactDiffViewerStylesOverride };

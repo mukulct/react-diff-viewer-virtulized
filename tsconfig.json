@@ -2,7 +2,7 @@
   "compilerOptions": {
     "experimentalDecorators": true,
     "jsx": "react-jsx",
-    "module": "commonjs",
+    "module": "es2020",
     "moduleResolution": "node",
     "noImplicitAny": true,
     "esModuleInterop": true,
@@ -12,6 +12,6 @@
     "lib": ["es2017", "dom"],
     "types": ["jest", "node"]
   },
-  "include": ["src/", "examples/"],
+  "include": ["src", "workers/diffWorker.ts"],
   "exclude": ["node_modules"]
 }
