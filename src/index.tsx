@@ -563,12 +563,12 @@ class DiffViewer extends React.Component<
       computeNow
     ) {
       this.props.onComputing?.(true);
+      const startTime = Date.now();
       console.log(
         'Computing diff',
         oldValue.toString().length,
         newValue.toString().length,
       );
-      console.time('diff');
       const { lineInformation, diffLines } =
         await this.worker.computeLineInformation(
           oldValue,
@@ -582,8 +582,7 @@ class DiffViewer extends React.Component<
       updateDiffLines = diffLines;
 
       lineInfoChanged = true;
-      console.log('Diff computed');
-      console.timeEnd('diff');
+      console.log('Diff computed', Date.now() - startTime);
     }
 
     let updateLineBlocks = this.state.lineBlocks;
@@ -765,7 +764,6 @@ function DynamicSizeList({
   const sizeMap = React.useRef<Record<number, number>>({});
   const setSize = React.useCallback((index, size) => {
     sizeMap.current = { ...sizeMap.current, [index]: size };
-    console.log('Size', index, size);
     if (listRef.current) {
       listRef.current.resetAfterIndex(index);
     }
