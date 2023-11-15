@@ -118,7 +118,7 @@ declare class DiffViewer extends React.Component<ReactDiffViewerProps, ReactDiff
      * @param obj.right Life diff information for the removed section of the inline view.
      * @param index React key for the lines.
      */
-    renderInlineView: ({ left, right }: LineInformation, index: number) => ReactElement;
+    renderInlineView: ({ left, right }: LineInformation, index: number, styles: React.CSSProperties) => ReactElement;
     /**
      * Returns a function with clicked block number in the closure.
      *

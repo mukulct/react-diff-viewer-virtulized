@@ -165,6 +165,9 @@ export default (
   const splitView = css({
     [`.${content}`]: {
       width: '50%',
+      maxWidth: '50%',
+      minWidth: '50%',
+      overflow: 'hidden',
     },
     label: 'split-view',
   });
@@ -179,6 +182,7 @@ export default (
     },
     label: 'diff-container',
     borderCollapse: 'collapse',
+    tableLayout: 'fixed',
   });
 
   const codeFoldContent = css({
@@ -286,6 +290,8 @@ export default (
 
   const marker = css({
     width: 25,
+    maxWidth: 25,
+    minWidth: 25,
     paddingLeft: 10,
     paddingRight: 10,
     userSelect: 'none',
