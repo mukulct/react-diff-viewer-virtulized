@@ -373,7 +373,6 @@ class DiffViewer extends React.Component<
     styles: React.CSSProperties,
   ): ReactElement => {
     return (
-      // <tr key={index} className={this.styles.line} style={styles}>
       <>
         {this.renderLine(
           left.lineNumber,
@@ -388,8 +387,6 @@ class DiffViewer extends React.Component<
           right.value,
         )}
       </>
-
-      // </tr>
     );
   };
 
