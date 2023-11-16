@@ -166,7 +166,7 @@ export default (
     [`.${content}`]: {
       width: '50%',
       maxWidth: '50%',
-      minWidth: '50%',
+      minWidth: '408px',
       overflow: 'hidden',
     },
     label: 'split-view',
