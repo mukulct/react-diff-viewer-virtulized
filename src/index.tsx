@@ -799,7 +799,7 @@ function DynamicSizeList({
           height={height}
           width={width}
           itemSize={getSize}
-          itemCount={nodes.length + 1}
+          itemCount={nodes.length ? nodes.length + 1 : 0}
           itemData={{
             children: nodes,
             styles: styles,
