@@ -557,18 +557,19 @@ class DiffViewer extends React.Component<
     let updateLineInformation = this.state.lineInformation;
     let updateDiffLines = this.state.diffLines;
 
+    const startTime = Date.now();
+    console.log(
+      'Computing diff',
+      oldValue.toString().length,
+      newValue.toString().length,
+    );
+
     if (
       oldValue !== prevProps.oldValue ||
       newValue !== prevProps.newValue ||
       computeNow
     ) {
       this.props.onComputing?.(true);
-      const startTime = Date.now();
-      console.log(
-        'Computing diff',
-        oldValue.toString().length,
-        newValue.toString().length,
-      );
       const { lineInformation, diffLines } =
         await this.worker.computeLineInformation(
           oldValue,
@@ -582,7 +583,6 @@ class DiffViewer extends React.Component<
       updateDiffLines = diffLines;
 
       lineInfoChanged = true;
-      console.log('Diff computed', Date.now() - startTime);
     }
 
     let updateLineBlocks = this.state.lineBlocks;
@@ -625,6 +625,7 @@ class DiffViewer extends React.Component<
       });
     }
 
+    console.log('Diff computed', Date.now() - startTime);
     const hasComputed = this.state.lineInformation?.length > 0;
     this.props.onComputing?.(!hasComputed);
   }
